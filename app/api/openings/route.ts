@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
       job_type,
       description
     } = body;
-console.log(body);
     const result = await executeQuery({
       query: `
         INSERT INTO open_positions (

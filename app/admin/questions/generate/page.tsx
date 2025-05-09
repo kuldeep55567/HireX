@@ -4,29 +4,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-
-interface QuestionData {
-  interview_stage_id: number;
-  question_text: string;
-  options: string[];
-  correct_option_index: number;
-  question_type: string;
-  difficulty_level: string;
-  marks: number;
-  time_limit_seconds: number;
-  expected_keywords?: string[];
-}
-
-interface JobRoundDetails {
-  job_id: number;
-  job_title: string;
-  department: string;
-  round_id: number;
-  round_number: number;
-  round_type: string;
-  round_title: string;
-}
-
+import { QuestionData, JobRoundDetails } from "@/app/types/interface";
 export default function GenerateQuestionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,7 +17,6 @@ export default function GenerateQuestionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<boolean>(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<QuestionData[]>([]);
-  const [aiPrompt, setAiPrompt] = useState<string>("");
   const [formData, setFormData] = useState({
     numQuestions: 5,
     difficultyLevel: "Medium",
@@ -54,62 +31,67 @@ export default function GenerateQuestionsPage() {
       return;
     }
 
-    // In a real app, fetch job and round details here
-    // For now using mock data
-    setRoundDetails({
-      job_id: parseInt(jobId),
-      job_title: "Software Engineer",
-      department: "Engineering",
-      round_id: 1,
-      round_number: parseInt(roundNumber),
-      round_type: "Quiz",
-      round_title: "Technical Screening",
-    });
+    const fetchJobDetails = async () => {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_HOST}/api/admin/jobs/${jobId}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to fetch job details");
+        }
+        return data;
+      } catch (err) {
+        console.error("Error fetching job details:", err);
+        return null;
+      }
+    };
 
-    // Build initial AI prompt
-    const initialPrompt = `Generate ${formData.numQuestions} multiple-choice questions for a Software Engineer technical screening. Each question should have 4 options with one correct answer.`;
-    setAiPrompt(initialPrompt);
+    // Create an immediately invoked async function to handle the async operation
+    (async () => {
+      const jobDetails = await fetchJobDetails();
+      if (!jobDetails) {
+        setError("Failed to fetch job details");
+        return;
+      }
+
+      // Log the job details to debug
+      console.log("Job details from API:", jobDetails);
+      
+      setRoundDetails({
+        job_id: parseInt(jobDetails.job_id), // Use the correct job ID from the API response
+        job_title: jobDetails.job_title,
+        department: jobDetails.department,
+        experience_min: jobDetails.experience_min,
+        experience_max: jobDetails.experience_max,
+        round_id: parseInt(jobDetails.round_number), // Use the interview stage ID from the API response
+        round_number: parseInt(jobDetails.round_number),
+        round_type: jobDetails.round_type,
+        round_title: jobDetails.title || jobDetails.round_title,
+        description: jobDetails.description || "",
+      });
+      
+      console.log("Set round details:", {
+        job_id: parseInt(jobDetails.id),
+        round_id: parseInt(jobDetails.id),
+        round_type: jobDetails.round_type
+      });
+
+      // Set default question type based on round_type
+      const questionType = jobDetails.round_type
+
+      // Set default additionalInfo to include job description
+      setFormData((prev) => ({
+        ...prev,
+        questionType: questionType,
+        additionalInfo: jobDetails.description || "",
+      }));
+    })();
   }, [jobId, roundNumber]);
-
-  const updateAIPrompt = () => {
-    const prompt = `Generate ${formData.numQuestions} ${formData.difficultyLevel.toLowerCase()}-difficulty ${
-      formData.questionType
-    } questions for a ${roundDetails?.job_title || ""} position in the ${
-      roundDetails?.department || ""
-    } department. This is for Round ${roundDetails?.round_number || ""}: ${
-      roundDetails?.round_title || ""
-    } (${roundDetails?.round_type || ""}).
-    
-${formData.topic ? `Focus on topics related to: ${formData.topic}` : ""}
-${formData.additionalInfo ? `Additional information: ${formData.additionalInfo}` : ""}
-
-For each question, provide:
-1. The question text
-2. Four possible answers (options)
-3. The index of the correct answer (0-3)
-4. A difficulty level (Easy, Medium, Hard)
-5. Points/marks for the question (between 1-5)
-6. Time limit in seconds to answer (between 10-120)
-${
-  formData.questionType === "Short Answer"
-    ? "7. Expected keywords or phrases for short answer questions"
-    : ""
-}
-
-Return the data in a structured JSON format.`;
-
-    setAiPrompt(prompt);
-  };
-
-  useEffect(() => {
-    updateAIPrompt();
-  }, [formData, roundDetails]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value, type } = e.target;
-    
+
     if (type === "number") {
       setFormData({
         ...formData,
@@ -127,36 +109,64 @@ Return the data in a structured JSON format.`;
     setIsLoading(true);
     setError(null);
 
+    if (!roundDetails) {
+      setError("Job and round details are required");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // In a real app, call your Claude API here with aiPrompt
-      // For now, generate mock data
-      setTimeout(() => {
-        const mockQuestions: QuestionData[] = Array.from({ length: formData.numQuestions }).map(
-          (_, i) => ({
-            interview_stage_id: roundDetails?.round_id || 0,
-            question_text: `Sample ${formData.difficultyLevel} question ${i + 1} for ${roundDetails?.job_title}?`,
-            options: [
-              "Option A - This is a sample answer",
-              "Option B - This could be correct",
-              "Option C - Another possibility",
-              "Option D - Final option",
-            ],
-            correct_option_index: Math.floor(Math.random() * 4),
-            question_type: formData.questionType,
-            difficulty_level: formData.difficultyLevel,
-            marks: Math.floor(Math.random() * 5) + 1,
-            time_limit_seconds: (Math.floor(Math.random() * 6) + 1) * 15,
-            ...(formData.questionType === "Short Answer" && {
-              expected_keywords: ["keyword1", "keyword2", "keyword3"],
-            }),
-          })
-        );
-        
-        setGeneratedQuestions(mockQuestions);
-        setIsLoading(false);
-      }, 1500);
+      console.log({
+        job_id: roundDetails.job_id,
+        interview_stage_id: roundDetails.round_id,
+        question_count: formData.numQuestions,
+        difficulty: formData.difficultyLevel,
+        additional_context: formData.topic + (formData.additionalInfo ? `. ${formData.additionalInfo}` : ""),
+        question_type:  formData.questionType
+      })  
+      // Call the AI questions API with the necessary parameters
+      const response = await fetch(`/api/ai/questions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          job_id: roundDetails.job_id,
+          interview_stage_id: roundDetails.round_id,
+          question_count: formData.numQuestions,
+          difficulty: formData.difficultyLevel,
+          additional_context: formData.topic + (formData.additionalInfo ? `. ${formData.additionalInfo}` : ""),
+          question_type: formData.questionType
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate questions");
+      }
+
+      const data = await response.json();
+      console.log("Generated questions:", data);
+      
+      // Format the response data to match our QuestionData interface
+      const formattedQuestions = data.map((question: any) => ({
+        interview_stage_id: roundDetails.round_id,
+        question_text: question.question_text,
+        options: Array.isArray(question.options) ? question.options : [],
+        correct_option_index: question.correct_option_index || 0,
+        question_type: question.question_type || formData.questionType,
+        difficulty_level: question.difficulty_level || formData.difficultyLevel,
+        marks: question.marks || 1,
+        time_limit_seconds: question.time_limit_seconds || 60,
+        expected_keywords: question.expected_keywords || []
+      }));
+      
+      setGeneratedQuestions(formattedQuestions);
     } catch (err) {
-      setError("Failed to generate questions");
+      console.error("Error generating questions:", err);
+      setError((err as Error).message || "Failed to generate questions");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -167,14 +177,28 @@ Return the data in a structured JSON format.`;
     setError(null);
 
     try {
+      // Check if roundDetails exists
+      if (!roundDetails) {
+        throw new Error("Round details are missing. Please try again.");
+      }
+      
       // Submit all questions one by one
       for (const question of generatedQuestions) {
+        // Ensure we're using the correct job_id and interview_stage_id
+        const questionData = {
+          ...question,
+          job_id: roundDetails.job_id, // Add job_id to each question
+          interview_stage_id: roundDetails.round_id // Ensure correct stage ID
+        };
+
+        console.log("Saving question with data:", questionData);
+
         const response = await fetch(`${process.env.NEXT_PUBLIC_HOST}/api/stageQuestions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(question),
+          body: JSON.stringify(questionData),
         });
 
         const data = await response.json();
@@ -194,7 +218,7 @@ Return the data in a structured JSON format.`;
 
   const handleQuestionChange = (index: number, field: keyof QuestionData, value: string | string[] | number) => {
     const updatedQuestions = [...generatedQuestions];
-    
+
     if (field === "options" && typeof value === "string") {
       // Split the textarea by new lines to get array of options
       updatedQuestions[index][field] = value.split("\n");
@@ -202,7 +226,7 @@ Return the data in a structured JSON format.`;
       // Type assertion to tell TypeScript this assignment is valid
       (updatedQuestions[index][field] as any) = value;
     }
-    
+
     setGeneratedQuestions(updatedQuestions);
   };
 
@@ -333,24 +357,39 @@ Return the data in a structured JSON format.`;
                 </select>
               </div>
 
-              <div>
-                <label
-                  htmlFor="questionType"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Question Type
-                </label>
-                <select
-                  id="questionType"
-                  name="questionType"
-                  value={formData.questionType}
-                  onChange={handleChange}
-                  className="block w-full px-3 py-2 mt-1 text-gray-700 border border-gray-300 rounded-md shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="MCQ">Multiple Choice</option>
-                  <option value="Short Answer">Short Answer</option>
-                </select>
-              </div>
+              {roundDetails.round_type?.toLowerCase() !== "interview" && (
+                <div>
+                  <label
+                    htmlFor="questionType"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    Question Type
+                  </label>
+                  <select
+                    id="questionType"
+                    name="questionType"
+                    value={formData.questionType}
+                    onChange={handleChange}
+                    className="block w-full px-3 py-2 mt-1 text-gray-700 border border-gray-300 rounded-md shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="MCQ">Multiple Choice</option>
+                    <option value="Short Answer">Short Answer</option>
+                  </select>
+                </div>
+              )}
+              {roundDetails.round_type?.toLowerCase() === "interview" && (
+                <div>
+                  <label
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    Question Type
+                  </label>
+                  <div className="block w-full px-3 py-2 mt-1 text-gray-700 border border-gray-300 rounded-md shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                    Open-ended (Interview)
+                  </div>
+                  <input type="hidden" name="questionType" value="Interview" />
+                </div>
+              )}
 
               <div>
                 <label
@@ -384,22 +423,10 @@ Return the data in a structured JSON format.`;
                 value={formData.additionalInfo}
                 onChange={handleChange}
                 rows={3}
-                placeholder="Any specific requirements or guidance for the AI..."
+                placeholder="Job description is included by default. Add any additional requirements here..."
                 className="block w-full px-3 py-2 mt-1 text-gray-700 border border-gray-300 rounded-md shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               ></textarea>
             </div>
-
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                AI Prompt Preview
-              </h3>
-              <div className="p-3 bg-gray-100 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600">
-                <pre className="text-xs text-gray-700 whitespace-pre-wrap dark:text-gray-300">
-                  {aiPrompt}
-                </pre>
-              </div>
-            </div>
-
             <div className="flex justify-end mt-6">
               <button
                 type="button"

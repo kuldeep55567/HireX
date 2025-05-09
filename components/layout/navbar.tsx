@@ -2,14 +2,20 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Menu, X, Sun, Moon } from "lucide-react"
+import { Menu, X, Sun, Moon, User, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { signOut, useSession } from "next-auth/react"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
+  const { data: session } = useSession()
+  console.log({session})
+  // Check if user has admin role
+  const isAdmin = session?.user?.role === "admin"
 
   useEffect(() => {
     const handleScroll = () => {
@@ -40,6 +46,27 @@ export function Navbar() {
       document.documentElement.classList.remove("dark")
       localStorage.setItem("theme", "light")
     }
+  }
+
+  const handleLogout = async () => {
+    try {
+      // Clear cookies manually for additional safety
+      document.cookie = "token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+      document.cookie = "next-auth.session-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+      document.cookie = "next-auth.csrf-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+      document.cookie = "next-auth.callback-url=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+      
+      // Sign out via NextAuth
+      await signOut({ 
+        callbackUrl: "/login",
+        redirect: true
+      })
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Force redirect on error as fallback
+      window.location.href = "/login";
+    }
+    setIsOpen(false)
   }
 
   return (
@@ -77,8 +104,17 @@ export function Navbar() {
               href="/openings"
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
-             Jobs
+              Jobs
             </Link>
+            {/* Admin button for desktop - only show if user has admin role */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="font-bold text-yellow-500 hover:text-yellow-400 transition-colors"
+              >
+                Admin
+              </Link>
+            )}
           </div>
         </div>
 
@@ -108,13 +144,41 @@ export function Navbar() {
                 )}
               </div>
             </div>
-            <Button asChild variant="ghost">
-              <Link href="/login">Sign In</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/login">Get Started</Link>
-            </Button>
+
+            {session?.user ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-muted">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={session.user.image || undefined} />
+                    <AvatarFallback>
+                      <User className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium">
+                    {session.user.name || session.user.email?.split('@')[0]}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="text-destructive hover:text-destructive"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button asChild variant="ghost">
+                  <Link href="/login">Sign In</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/login">Get Started</Link>
+                </Button>
+              </>
+            )}
           </div>
+
           <div className="flex md:hidden items-center">
             <div 
               className="relative inline-block w-10 h-5 cursor-pointer mr-2"
@@ -175,22 +239,68 @@ export function Navbar() {
             >
               How It Works
             </Link>
+            <Link
+              href="/openings"
+              className="text-lg font-medium"
+              onClick={() => setIsOpen(false)}
+            >
+              Jobs
+            </Link>
+            {/* Admin button for mobile - only show if user has admin role */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="text-lg font-bold text-yellow-500"
+                onClick={() => setIsOpen(false)}
+              >
+                Admin
+              </Link>
+            )}
             <div className="pt-6 border-t">
-              <Button
-                asChild
-                className="w-full mb-3"
-                variant="outline"
-                onClick={() => setIsOpen(false)}
-              >
-                <Link href="/login">Sign In</Link>
-              </Button>
-              <Button
-                asChild
-                className="w-full"
-                onClick={() => setIsOpen(false)}
-              >
-                <Link href="/login">Get Started</Link>
-              </Button>
+              {session?.user ? (
+                <>
+                  <div className="flex items-center gap-3 mb-4 px-3 py-2 rounded-lg bg-muted">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={session.user.image || undefined} />
+                      <AvatarFallback>
+                        <User className="h-4 w-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{session.user.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {session.user.email}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    asChild
+                    className="w-full mb-3"
+                    variant="outline"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Link href="/login">Sign In</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    className="w-full"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <Link href="/login">Get Started</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

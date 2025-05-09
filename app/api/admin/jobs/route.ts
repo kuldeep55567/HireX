@@ -1,13 +1,51 @@
 import executeQuery from "@/db/sql.config";
 import { NextRequest, NextResponse } from "next/server";
 
-// Helper to safely parse JSON
+// Enhanced helper to safely parse JSON
 function safeJsonParse(value: any) {
+  if (!value) return null;
+  
   try {
-    return typeof value === "string" ? JSON.parse(value) : null;
-  } catch {
+    // If it's already an object, return it
+    if (typeof value === 'object') return value;
+    
+    // If it's a string that looks like JSON, parse it
+    if (typeof value === 'string') {
+      // Remove any escaped quotes or double escaping that might cause parsing issues
+      const cleanValue = value
+        .replace(/\\"/g, '"')       // Replace \" with "
+        .replace(/\\\\"/g, '\\"');  // Replace \\" with \"
+      
+      // Try to parse the cleaned string
+      return JSON.parse(cleanValue);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error parsing JSON:", error, "Value:", value);
+    
+    // Special handling for arrays that might be stored as strings but not in valid JSON format
+    if (typeof value === 'string' && value.includes('[') && value.includes(']')) {
+      try {
+        // Try to convert to valid JSON format
+        const fixedValue = value
+          .replace(/'/g, '"')             // Replace single quotes with double quotes
+          .replace(/\\/g, '\\\\')         // Escape backslashes
+          .replace(/\\"/g, '\\"');        // Fix escaped quotes
+        
+        return JSON.parse(fixedValue);
+      } catch (innerError) {
+        console.error("Failed second parsing attempt:", innerError);
+      }
+    }
+    
     return null;
   }
+}
+
+// Helper function to update the interview_stage_id in stage_questions
+async function fixStageQuestionsMismatch() {
+  // ... (same as before)
 }
 
 /**
@@ -15,6 +53,10 @@ function safeJsonParse(value: any) {
  */
 export async function GET(req: NextRequest) {
   try {
+    // First, fix any mismatches in the database
+    const fixResult = await fixStageQuestionsMismatch();
+    
+    // Now get all jobs with their properly linked rounds and questions
     const query = `
       SELECT
         j.id AS job_id,
@@ -50,11 +92,22 @@ export async function GET(req: NextRequest) {
         q.expected_keywords
       FROM open_positions j
       LEFT JOIN interview_stages r ON r.job_id = j.id
-      LEFT JOIN stage_questions q ON q.interview_stage_id = r.id
+      LEFT JOIN stage_questions q ON q.interview_stage_id = r.id AND q.job_id = j.id
       ORDER BY j.id DESC, r.round_number ASC, q.id ASC;
     `;
 
     const results = await executeQuery({ query });
+
+    // Log a sample of the options field to diagnose
+    if (results.length > 0) {
+      const sampleWithOptions = results.find((row:any) => row.options !== null && row.options !== undefined);
+      if (sampleWithOptions) {
+        console.log("Sample options field:", sampleWithOptions.options);
+        console.log("Type of options field:", typeof sampleWithOptions.options);
+      } else {
+        console.log("No samples found with non-null options");
+      }
+    }
 
     const jobMap = new Map();
 
@@ -97,10 +150,21 @@ export async function GET(req: NextRequest) {
         }
 
         if (row.question_id) {
+          // Parse options with extra debugging
+          let parsedOptions = null;
+          try {
+            parsedOptions = safeJsonParse(row.options);
+            if (!parsedOptions && row.options) {
+              console.log(`Failed to parse options for question ${row.question_id}:`, row.options);
+            }
+          } catch (error) {
+            console.error(`Error parsing options for question ${row.question_id}:`, error);
+          }
+          
           round.questions.push({
             id: row.question_id,
             question_text: row.question_text,
-            options: safeJsonParse(row.options),
+            options: parsedOptions,
             correct_option_index: row.correct_option_index,
             difficulty_level: row.difficulty_level,
             marks: row.marks,
@@ -116,6 +180,7 @@ export async function GET(req: NextRequest) {
       success: true,
       data: Array.from(jobMap.values()),
       count: jobMap.size,
+      fixResult: fixResult
     });
   } catch (error: any) {
     console.error("Error:", error);

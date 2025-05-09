@@ -46,3 +46,28 @@ export interface StageQuestion {
 export interface JobWithDetails extends JobOpening {
   rounds?: InterviewStage[];
 }
+
+export interface QuestionData {
+  interview_stage_id: number;
+  question_text: string;
+  options: string[];
+  correct_option_index: number;
+  question_type: string;
+  difficulty_level: string;
+  marks: number;
+  time_limit_seconds: number;
+  expected_keywords?: string[];
+}
+
+export interface JobRoundDetails {
+  job_id: number;
+  job_title: string;
+  department: string;
+  experience_min: number;
+  experience_max: number;
+  round_id: number;
+  round_number: number;
+  round_type: string;
+  round_title: string;
+  description?: string;
+}
