@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 
 export default function AdminLayout({
@@ -14,35 +14,51 @@ export default function AdminLayout({
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  
+  // After component mounts, we can show the UI
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  
+  // If not mounted yet, return a simple loading state or nothing
+  // This prevents hydration errors by not rendering anything with theme-dependent content
+  if (!mounted) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-100">
+        <div className="animate-pulse">Loading...</div>
+      </div>
+    );
+  }
 
   const navItems = [
     { name: "Dashboard", path: "/admin", icon: "chart-bar" },
     { name: "Job Listings", path: "/admin/jobs", icon: "briefcase" },
     { name: "Create Job", path: "/admin/jobs/create", icon: "plus-circle" },
-    { name: "Users", path: "/admin/users", icon: "users" }
+    { name: "Applicants", path: "/admin/users", icon: "users" }
   ];
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen bg-gray-100  dark:bg-background shadow-[0_10px_60px_rgba(0,0,0,0.15)] border border-gray-200 dark:border-gray-800">
       {/* Sidebar */}
       <aside
         className={`${
-          isSidebarOpen ? "w-64" : "w-20"
-        } transition-all duration-300 ease-in-out bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col`}
+          isSidebarOpen ? "w-72" : "w-20"
+        } transition-all duration-300 ease-in-out bg-white dark:bg-background border-r border-gray-200/30 dark:border-gray-800/20 flex flex-col shadow-md`}
       >
-        <div className="flex items-center justify-between h-16 p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between h-16 p-6 border-b border-gray-200 dark:border-gray-800">
           {isSidebarOpen ? (
-            <h1 className="text-xl font-bold text-blue-600 dark:text-blue-400">
+            <h1 className="text-xl font-bold text-blue-600 dark:text-blue-500 tracking-tight">
               Admin Panel
             </h1>
           ) : (
-            <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+            <span className="text-xl font-bold text-blue-600 dark:text-blue-500">
               AP
             </span>
           )}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1 rounded-full text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -70,24 +86,24 @@ export default function AdminLayout({
           </button>
         </div>
 
-        <nav className="mt-6 px-2 space-y-1 flex-1">
+        <nav className="mt-6 px-4 space-y-1.5 flex-1">
           {navItems.map((item) => (
             <Link
               key={item.path}
               href={item.path}
               className={`${
                 pathname === item.path
-                  ? "bg-blue-50 text-blue-600 dark:bg-blue-900 dark:text-blue-200"
-                  : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
-              } group flex items-center px-2 py-3 rounded-md transition-colors`}
+                  ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800/60"
+              } group flex items-center px-3 py-3 rounded-lg transition-all font-medium`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className={`h-5 w-5 ${
                   pathname === item.path
-                    ? "text-blue-500"
+                    ? "text-blue-600 dark:text-blue-400"
                     : "text-gray-500 dark:text-gray-400"
-                } mr-3`}
+                } mr-3 flex-shrink-0`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -124,7 +140,7 @@ export default function AdminLayout({
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 )}
-                {item.icon === "document-text" && (
+                {item.icon === "users" && (
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -137,58 +153,24 @@ export default function AdminLayout({
             </Link>
           ))}
         </nav>
-
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="w-full flex items-center px-2 py-2 text-sm font-medium rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 mr-3 text-gray-500 dark:text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              {theme === "dark" ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                />
-              ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                />
-              )}
-            </svg>
-            {isSidebarOpen && (
-              <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
-            )}
-          </button>
-        </div>
       </aside>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6">
-          <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+        <header className="h-16 bg-white dark:bg-background border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-8 shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-800 dark:text-gray-100">
             {navItems.find((item) => item.path === pathname)?.name || "Admin"}
           </h1>
           <div className="flex items-center">
             <div className="relative">
-              <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center text-white cursor-pointer">
+              <div className="h-9 w-9 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center text-white cursor-pointer transition-colors shadow-sm">
                 A
               </div>
             </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
+        <main className="flex-1 overflow-y-auto p-8 bg-gray-100 dark:bg-transparent">
           {children}
         </main>
       </div>
