@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import executeQuery from "@/db/sql.config";
 
-function safeJsonParse(value: any) {
-  try {
-    return typeof value === "string" ? JSON.parse(value) : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(req: NextRequest) {
   const jobId = req.nextUrl.searchParams.get("job_id");
   const stageId = req.nextUrl.searchParams.get("interview_stage_id");
@@ -23,14 +15,19 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await executeQuery({
-      query: `SELECT * FROM stage_questions WHERE job_id = ? AND interview_stage_id = ?`,
+      query: `SELECT sq.*, iss.title,iss.description 
+              FROM stage_questions sq
+              LEFT JOIN interview_stages iss 
+              ON iss.job_id = sq.job_id 
+              AND iss.round_number = sq.interview_stage_id
+              WHERE sq.job_id = ? 
+              AND sq.interview_stage_id = ?;`,
       values: [jobId, stageId],
     });
-
     const questions = result.map((q: any) => ({
       ...q,
-      options: safeJsonParse(q.options),
-      expected_keywords: safeJsonParse(q.expected_keywords),
+      options: q.options,
+      expected_keywords: q.expected_keywords
     }));
 
     return NextResponse.json(questions);

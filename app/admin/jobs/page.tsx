@@ -27,7 +27,6 @@ export default function AdminJobsPage() {
     try {
       setLoading(true);
       const response = await fetchJobs();
-      
       if (response.success) {
         setJobs(response.data);
         

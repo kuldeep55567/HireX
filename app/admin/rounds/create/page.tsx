@@ -8,7 +8,7 @@ import Link from "next/link";
 interface RoundFormData {
   job_id: number;
   round_number: number;
-  round_type: "Quiz" | "Interview" | "Assignment" | "Group Discussion" | "HR";
+  round_type: "Quiz" | "Interview"
   title: string;
   description: string;
   duration_minutes: number;
@@ -112,7 +112,7 @@ export default function CreateRoundsPage() {
         break;
       case "round_type":
         // Ensure value is one of the allowed round types
-        updatedRounds[index][field] = value as "Quiz" | "Interview" | "Assignment" | "Group Discussion" | "HR";
+        updatedRounds[index][field] = value as "Quiz" | "Interview"
         break;
       case "title":
       case "description":

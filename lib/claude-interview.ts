@@ -1,7 +1,7 @@
 // lib/claude-interview.ts
 import Anthropic from "@anthropic-ai/sdk";
 const anthropic = new Anthropic({
-  apiKey: process.env.NEXT_PUBLIC_CLAUDE_API_KEY,
+  apiKey: process.env.CLAUDE_API_KEY,
 });
 interface UserResponse {
   questionId: number;
@@ -184,15 +184,9 @@ export async function generateQuestions(
   jobDescription: string,
 ) {
   // Determine question type based on roundType
-  console.log("Round type:", roundType);
-  let questionType;
-  if (roundType.toLowerCase() === "mcq") {
+  let questionType : string = "Interview"
+  if (roundType.toLowerCase() === "mcq" || roundType.toLowerCase() === "quiz") {
     questionType = "MCQ";
-  } else if (roundType.toLowerCase() === "interview") {
-    questionType = "Interview";
-  } else {
-    // Default to Interview if roundType is unclear
-    questionType = "Interview";
   }
   
   const prompt = `

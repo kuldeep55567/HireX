@@ -71,3 +71,29 @@ export interface JobRoundDetails {
   round_title: string;
   description?: string;
 }
+// app/types/interface.ts
+export interface JobOpening {
+  id: number;
+  job_title: string;
+  department: string;
+  description: string;
+  location: string;
+  job_type: string;
+  experience_min: number;
+  experience_max: number;
+  is_open: number;
+  available_positions: number;
+  total_applied: number;
+  notice_period_days: number;
+}
+
+export interface JobApplication {
+  email: string;
+  designation: string;
+  job_id: number;
+  position: string;
+  experience: string;
+  highest_education: string;
+  previously_employed: boolean;
+  status: string;
+}

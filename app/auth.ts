@@ -2,8 +2,6 @@
 // In a real implementation, you would use NextAuth.js or a similar library
 
 export const signInWithGoogle = async () => {
-  // This would be implemented with OAuth providers
-  console.log("Sign in with Google initiated");
   // Return a mock user for demonstration
   return {
     id: "user-1",

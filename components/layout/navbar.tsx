@@ -13,10 +13,9 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const { data: session } = useSession()
-  console.log({session})
   // Check if user has admin role
   const isAdmin = session?.user?.role === "admin"
-
+  const isLoggedIn = !!session?.user
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 20) {
@@ -89,17 +88,19 @@ export function Navbar() {
           </Link>
           <div className="hidden md:flex items-center space-x-6">
             <Link
-              href="/#features"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Features
-            </Link>
-            <Link
               href="/#how-it-works"
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
               How It Works
             </Link>
+            {isLoggedIn && (
+              <Link
+                href="/dashboard"
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Dashboard
+              </Link>
+            )}
             <Link
               href="/openings"
               className="text-muted-foreground hover:text-foreground transition-colors"

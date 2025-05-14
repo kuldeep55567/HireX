@@ -2,15 +2,90 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Webcam from 'react-webcam';
-import { InterviewReport, Round, UserResponse } from '../types/interview';
-import useSpeechToText from 'react-hook-speech-to-text';
+import dynamic from 'next/dynamic';
+import { useSession } from "next-auth/react"
+// 1. First approach - The most reliable way
+const Webcam = dynamic(
+  () => import('react-webcam').then((mod) => {
+    // Create a wrapper component that properly types the Webcam
+    const WrappedWebcam: React.FC<{
+      audio?: boolean;
+      ref?: React.RefObject<any>;
+      screenshotFormat?: 'image/webp' | 'image/png' | 'image/jpeg';
+      videoConstraints?: {
+        width: number;
+        height: number;
+        facingMode: string;
+      };
+      className?: string;
+    }> = (props) => {
+      const WebcamComponent = mod.default;
+      return <WebcamComponent {...props} />;
+    };
+    return WrappedWebcam;
+  }),
+  {
+    ssr: false,
+    loading: () => <div className="text-white text-center p-4">Loading camera...</div>
+  }
+);
 
-export default function Page(): JSX.Element {
+const useSpeechToText = (typeof window !== 'undefined') ?
+  require('react-hook-speech-to-text').useSpeechToText :
+  () => ({
+    error: null,
+    interimResult: '',
+    isRecording: false,
+    results: [],
+    startSpeechToText: () => { },
+    stopSpeechToText: () => { },
+  });
+
+
+type Round = {
+  id: number;
+  round_number: number;
+  round_type: string;
+  title: string;
+  description: string;
+  duration_minutes: number;
+  questions: Question[];
+};
+
+type Question = {
+  id: number;
+  question_text: string;
+  options?: string[];
+  question_type: string;
+  marks: number;
+  time_limit_seconds: number;
+  difficulty_level: string;
+  expected_keywords?: string[];
+};
+
+type UserResponse = {
+  questionId: number;
+  questionText: string;
+  userAnswer: string;
+  timeSpent: number;
+};
+
+type InterviewReport = {
+  jobId: number;
+  roundId: number;
+  candidateResponses: UserResponse[];
+  totalScore: number;
+  feedbackByCategory: any;
+  overallFeedback: string;
+  timestamp: string;
+};
+
+export default function InterviewPage(): JSX.Element {
   const searchParams = useSearchParams();
   const jobId = searchParams.get('job_id');
   const roundId = searchParams.get('round_id');
-  const email = searchParams.get('email') || 'candidate';
+  const { data: session } = useSession()
+  const email = session?.user?.email;
 
   // State
   const [loading, setLoading] = useState<boolean>(true);
@@ -27,14 +102,23 @@ export default function Page(): JSX.Element {
   const [pauseState, setPauseState] = useState<'thinking' | 'recording' | 'between' | null>(null);
   const [pauseTimer, setPauseTimer] = useState<number>(0);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [isClient, setIsClient] = useState(false);
 
-  // Add a ref to track when the current question started
+  // Refs
+  const webcamRef = useRef(null);
   const questionStartTimeRef = useRef<number>(Date.now());
-  
-  // Track results for the current question only
   const [currentQuestionResults, setCurrentQuestionResults] = useState<any[]>([]);
-  
-  // Use speech-to-text hook
+
+  // Initialize speech recognition only on client side
+  const speechConfig = isClient ? {
+    continuous: true,
+    useLegacyResults: false,
+    speechRecognitionProperties: {
+      lang: 'en-US',
+      interimResults: true,
+    }
+  } : null;
+
   const {
     error: speechError,
     interimResult,
@@ -42,62 +126,57 @@ export default function Page(): JSX.Element {
     results,
     startSpeechToText,
     stopSpeechToText,
-  } = useSpeechToText({
-    continuous: true,
-    useLegacyResults: false,
-    speechRecognitionProperties: {
-      lang: 'en-US',
-      interimResults: true,
-    }
-  });
+  } = useSpeechToText?.(speechConfig) || {};
+
+  // Set client flag on mount
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Update current question results when results change
   useEffect(() => {
-    // If we have new results, update our current question results
-    if (results.length > 0) {
+    if (results && results.length > 0) {
       setCurrentQuestionResults(results);
     }
   }, [results]);
-  
-  // Sync results from speech-to-text hook with our transcript state
+
+  // Sync results with transcript state
   useEffect(() => {
+    if (!isClient) return;
+
     if (currentQuestionResults.length > 0) {
-      // Create a fresh transcript from current question results only
       const transcript = currentQuestionResults.map(result =>
         typeof result === 'string' ? result : result.transcript
       ).join(' ');
       setCurrentTranscript(transcript);
     } else if (interimResult) {
-      // Use interim result directly
       setCurrentTranscript(
         currentQuestionResults.length > 0 ?
           currentQuestionResults.map(result => typeof result === 'string' ? result : result.transcript).join(' ') + ' ' + interimResult :
           interimResult
       );
     }
-  }, [currentQuestionResults, interimResult]);
-
-  // Webcam reference
-  const webcamRef = useRef(null);
+  }, [currentQuestionResults, interimResult, isClient]);
 
   // Get round data
   useEffect(() => {
-    const fetchRoundData = async (): Promise<void> => {
-      if (!jobId || !roundId) {
-        setError('Missing job ID or round ID');
-        setLoading(false);
-        return;
-      }
+    if (!isClient || !jobId || !roundId) return;
 
+    const fetchRoundData = async (): Promise<void> => {
       try {
+        setLoading(true);
         const response = await fetch(`${process.env.NEXT_PUBLIC_HOST}/api/interview?job_id=${jobId}&interview_stage_id=${roundId}`);
+
         if (!response.ok) {
-          throw new Error('Failed to fetch round data');
+          throw new Error('Failed to fetch interview data');
         }
 
         const questions = await response.json();
 
-        // Transform the API response to match the Round interface
+        if (!questions || questions.length === 0) {
+          throw new Error('No questions found for this interview round');
+        }
+
         const roundData: Round = {
           id: parseInt(roundId || '0'),
           round_number: 1,
@@ -119,39 +198,17 @@ export default function Page(): JSX.Element {
 
         setRound(roundData);
 
-        if (roundData.questions && roundData.questions.length > 0) {
+        // Initialize the interview state
+        setCurrentQuestionIndex(0);
+        setPauseState('thinking');
+        setPauseTimer(10); // 10 seconds reading time
+
+        // Set the time limit for the first question
+        if (roundData.questions?.length > 0) {
           setRemainingTime(roundData.questions[0].time_limit_seconds);
         }
-
-        // Check for saved responses in localStorage
-        if (typeof window !== 'undefined') {
-          const storageKey = `interview_responses_${jobId}_${roundId}_${email}`;
-          const savedResponses = localStorage.getItem(storageKey);
-
-          // if (savedResponses) {
-          //   try {
-          //     const parsedResponses = JSON.parse(savedResponses) as UserResponse[];
-          //     if (Array.isArray(parsedResponses) && parsedResponses.length > 0) {
-          //       setUserResponses(parsedResponses);
-
-          //       // If there are saved responses, set the current question index to the next unanswered question
-          //       if (parsedResponses.length < roundData.questions.length) {
-          //         setCurrentQuestionIndex(parsedResponses.length);
-          //         setRemainingTime(roundData.questions[parsedResponses.length].time_limit_seconds);
-          //       } else {
-          //         // All questions were answered
-          //         setCurrentQuestionIndex(roundData.questions.length - 1);
-          //         setInterviewComplete(true);
-          //       }
-
-          //       console.log('Restored saved responses:', parsedResponses.length);
-          //     }
-          //   } catch (err) {
-          //     console.error('Failed to parse saved responses:', err);
-          //   }
-          // }
-        }
       } catch (err: any) {
+        console.error('Error fetching interview data:', err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -159,10 +216,12 @@ export default function Page(): JSX.Element {
     };
 
     fetchRoundData();
-  }, [jobId, roundId, email]);
+  }, [jobId, roundId, email, isClient]);
 
   // Check permissions
   useEffect(() => {
+    if (!isClient) return;
+
     const checkPermissions = async (): Promise<void> => {
       try {
         // Check camera permission
@@ -175,19 +234,14 @@ export default function Page(): JSX.Element {
         setMicrophonePermission(true);
         audioStream.getTracks().forEach(track => track.stop());
 
-        // Check speech recognition support
         if (speechError) {
           setError('Your browser does not support speech recognition. Please use Chrome, Edge, Safari, or Firefox.');
         }
       } catch (err) {
         const error = err as Error;
         if (error.name === 'NotAllowedError') {
-          if (!cameraPermission) {
-            setCameraPermission(false);
-          }
-          if (!microphonePermission) {
-            setMicrophonePermission(false);
-          }
+          if (!cameraPermission) setCameraPermission(false);
+          if (!microphonePermission) setMicrophonePermission(false);
         } else {
           setError(`Error accessing media devices: ${error.message}`);
         }
@@ -195,12 +249,11 @@ export default function Page(): JSX.Element {
     };
 
     checkPermissions();
-  }, [speechError, cameraPermission, microphonePermission]);
+  }, [speechError, cameraPermission, microphonePermission, isClient]);
 
-  // Pause timer for thinking time
+  // Timer effects
   useEffect(() => {
-    // Skip on server-side rendering
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
 
     let timer: NodeJS.Timeout;
 
@@ -210,7 +263,11 @@ export default function Page(): JSX.Element {
           if (prev <= 1) {
             clearInterval(timer);
             setPauseState('recording');
-            startRecording(); // Use our updated function
+            startRecording();
+            // Start the question timer when reading time is over
+            if (round && round.questions && round.questions[currentQuestionIndex]) {
+              setRemainingTime(round.questions[currentQuestionIndex].time_limit_seconds);
+            }
             return 0;
           }
           return prev - 1;
@@ -222,7 +279,7 @@ export default function Page(): JSX.Element {
           if (prev <= 1) {
             clearInterval(timer);
             setPauseState('thinking');
-            setPauseTimer(10); // 10 seconds to read the question
+            setPauseTimer(10);
             return 0;
           }
           return prev - 1;
@@ -233,28 +290,28 @@ export default function Page(): JSX.Element {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [pauseState, pauseTimer]);
+  }, [pauseState, pauseTimer, isClient, round, currentQuestionIndex]);
 
   useEffect(() => {
-    // Skip on server-side rendering
-    if (typeof window === 'undefined') return;
+    if (!isClient) return;
 
     let timer: NodeJS.Timeout;
 
-    if (isRecording && remainingTime > 0) {
+    if (pauseState === 'recording' && remainingTime > 0) {
       timer = setInterval(() => {
         setRemainingTime(prev => {
           if (prev <= 1) {
             clearInterval(timer);
             stopRecording();
+            saveResponse();
 
-            // IMPORTANT: We've removed the saveResponse() call here to prevent duplication
-
-            // Automatically move to next question after a short delay
-            setTimeout(() => {
-              // Use the existing moveToNextQuestion function which will save the response
-              moveToNextQuestion();
-            }, 1000); // Small delay before advancing
+            // Check if there are more questions
+            if (round && currentQuestionIndex < round.questions.length - 1) {
+              setPauseState('between');
+              setPauseTimer(3); // 3 seconds between questions
+            } else {
+              setInterviewComplete(true);
+            }
 
             return 0;
           }
@@ -266,103 +323,107 @@ export default function Page(): JSX.Element {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [isRecording, remainingTime, currentQuestionIndex, round]);
+  }, [pauseState, remainingTime, currentQuestionIndex, round, isClient]);
+
+  // Fix the between-questions timer
+  useEffect(() => {
+    if (!isClient) return;
+
+    let timer: NodeJS.Timeout;
+
+    if (pauseState === 'between' && pauseTimer > 0) {
+      timer = setInterval(() => {
+        setPauseTimer(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            moveToNextQuestion();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [pauseState, pauseTimer, isClient]);
 
   const startCamera = (): void => {
     setCameraActive(true);
     setPauseState('thinking');
-    setPauseTimer(10); // 10 seconds to read the question
+    setPauseTimer(10);
   };
 
   const startRecording = (): void => {
-    // Reset for new question
-    questionStartTimeRef.current = Date.now();
-    setCurrentQuestionResults([]);
-    setCurrentTranscript('');
-    startSpeechToText();
+    if (startSpeechToText) {
+      questionStartTimeRef.current = Date.now();
+      setCurrentQuestionResults([]);
+      setCurrentTranscript('');
+      startSpeechToText();
+    }
   };
 
   const stopRecording = (): void => {
-    stopSpeechToText();
+    if (stopSpeechToText) {
+      stopSpeechToText();
+    }
   };
 
   const saveResponse = (): void => {
-    if (round && round.questions[currentQuestionIndex]) {
-      const currentQuestionId = round.questions[currentQuestionIndex].id;
-      
-      // Create new response with current data
-      const newResponse: UserResponse = {
-        questionId: currentQuestionId,
-        questionText: round.questions[currentQuestionIndex].question_text,
-        userAnswer: currentTranscript || 'No response recorded',
-        timeSpent: round.questions[currentQuestionIndex].time_limit_seconds - remainingTime
-      };
+    if (!round || !round.questions[currentQuestionIndex] || !isClient) return;
 
-      // Add to userResponses state, replacing any existing response for the same question
-      setUserResponses(prev => {
-        // Check if we already have a response for this question
-        const existingResponseIndex = prev.findIndex(r => r.questionId === currentQuestionId);
-        
-        let updatedResponses;
-        if (existingResponseIndex >= 0) {
-          // Replace the existing response
-          updatedResponses = [...prev];
-          updatedResponses[existingResponseIndex] = newResponse;
-        } else {
-          // Add a new response
-          updatedResponses = [...prev, newResponse];
-        }
+    const currentQuestionId = round.questions[currentQuestionIndex].id;
 
-        // Also save to localStorage as a backup
-        try {
-          if (typeof window !== 'undefined') {
-            const storageKey = `interview_responses_${jobId}_${roundId}_${email}`;
-            localStorage.setItem(storageKey, JSON.stringify(updatedResponses));
-          }
-        } catch (err) {
-          console.error('Failed to save to localStorage:', err);
-        }
+    const newResponse: UserResponse = {
+      questionId: currentQuestionId,
+      questionText: round.questions[currentQuestionIndex].question_text,
+      userAnswer: currentTranscript || 'No response recorded',
+      timeSpent: round.questions[currentQuestionIndex].time_limit_seconds - remainingTime
+    };
 
-        return updatedResponses;
-      });
+    setUserResponses(prev => {
+      const existingResponseIndex = prev.findIndex(r => r.questionId === currentQuestionId);
+      const updatedResponses = existingResponseIndex >= 0
+        ? [...prev.slice(0, existingResponseIndex), newResponse, ...prev.slice(existingResponseIndex + 1)]
+        : [...prev, newResponse];
 
-      // Reset current transcript
-      setCurrentTranscript('');
-    }
+      try {
+        const storageKey = `interview_responses_${jobId}_${roundId}_${email}`;
+        localStorage.setItem(storageKey, JSON.stringify(updatedResponses));
+      } catch (err) {
+        console.error('Failed to save to localStorage:', err);
+      }
+
+      return updatedResponses;
+    });
+
+    setCurrentTranscript('');
   };
 
   const moveToNextQuestion = (): void => {
-    stopRecording();
-    saveResponse(); // This will save the response once
-
     if (!round) return;
 
-    if (currentQuestionIndex < round.questions.length - 1) {
-      const nextIndex = currentQuestionIndex + 1;
+    const nextIndex = currentQuestionIndex + 1;
+
+    if (nextIndex < round.questions.length) {
       setCurrentQuestionIndex(nextIndex);
-      setRemainingTime(round.questions[nextIndex].time_limit_seconds);
-      
-      // Clear transcript and speech recognition results for the new question
       setCurrentTranscript('');
       setCurrentQuestionResults([]);
       questionStartTimeRef.current = Date.now();
-
-      // Set pause timer between questions
-      setPauseState('between');
-      setPauseTimer(3); // 3 seconds between questions
+      setPauseState('thinking');
+      setPauseTimer(10); // 10 seconds to read next question
+      setRemainingTime(round.questions[nextIndex].time_limit_seconds);
     } else {
-      // Last question completed
       setInterviewComplete(true);
     }
   };
-  
   const analyzewithClaude = async (): Promise<void> => {
     if (!round || userResponses.length === 0) return;
 
     setAnalyzing(true);
 
     try {
-      // Call the backend API to analyze responses
       const response = await fetch(`${process.env.NEXT_PUBLIC_HOST}/api/ai`, {
         method: 'POST',
         headers: {
@@ -379,13 +440,9 @@ export default function Page(): JSX.Element {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to analyze responses');
-      }
+      if (!response.ok) throw new Error('Failed to analyze responses');
 
       const result = await response.json();
-
-      // Create interview report
       const interviewReport: InterviewReport = {
         jobId: parseInt(jobId || '0'),
         roundId: parseInt(roundId || '0'),
@@ -396,20 +453,14 @@ export default function Page(): JSX.Element {
         timestamp: new Date().toISOString()
       };
 
-      // Save to local storage just for client-side convenience
-      localStorage.setItem(`interview_report_${jobId}_${roundId}`, JSON.stringify(interviewReport));
-
-      // Redirect to a thank you page
-      setAnalyzing(false);
-
-      // Show a thank you message and don't display the full report
-      if (typeof window !== 'undefined') {
+      if (isClient) {
+        localStorage.setItem(`interview_report_${jobId}_${roundId}`, JSON.stringify(interviewReport));
         window.location.href = `/openings?success=true`;
       }
-
     } catch (err) {
       console.error('Error analyzing responses:', err);
       setError('Failed to analyze responses');
+    } finally {
       setAnalyzing(false);
     }
   };
@@ -420,7 +471,8 @@ export default function Page(): JSX.Element {
     return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
   };
 
-  if (loading) {
+  // Render loading/error states
+  if (!isClient || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -446,7 +498,6 @@ export default function Page(): JSX.Element {
       </div>
     );
   }
-
   if (cameraPermission === false || microphonePermission === false) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
@@ -570,7 +621,7 @@ export default function Page(): JSX.Element {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {formatTime(remainingTime)}
+                Answering Time: {formatTime(remainingTime)}
               </div>
             )}
           </div>
@@ -655,20 +706,23 @@ export default function Page(): JSX.Element {
             <div className="p-4 flex-grow">
               <div className="mb-6">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  {round.questions[currentQuestionIndex].question_text}
+                  {round && round.questions && round.questions[currentQuestionIndex] ?
+                    round.questions[currentQuestionIndex].question_text : 'Loading question...'}
                 </h3>
                 <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                   <span className="flex items-center mr-4">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    {round.questions[currentQuestionIndex].time_limit_seconds} seconds
+                    {round && round.questions && round.questions[currentQuestionIndex] ?
+                      round.questions[currentQuestionIndex].time_limit_seconds : 0} seconds
                   </span>
                   <span className="flex items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    {round.questions[currentQuestionIndex].marks} points
+                    {round && round.questions && round.questions[currentQuestionIndex] ?
+                      round.questions[currentQuestionIndex].marks : 0} points
                   </span>
                 </div>
               </div>
@@ -705,13 +759,24 @@ export default function Page(): JSX.Element {
             </div>
 
             <div className="p-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <p className="mb-2">
-                  <strong>Instructions:</strong> You'll have 10 seconds to read each question before recording starts automatically.
-                </p>
-                <p>
-                  Speak clearly into your microphone. Your voice will be converted to text in real-time.
-                </p>
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="mb-2">
+                    <strong>Instructions:</strong> You'll have 10 seconds to read each question before recording starts automatically.
+                  </p>
+                  <p>
+                    Speak clearly into your microphone. Your voice will be converted to text in real-time.
+                  </p>
+                </div>
+                {!interviewComplete && pauseState && (
+                  <button
+                    onClick={moveToNextQuestion}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                    disabled={currentQuestionIndex === (round?.questions?.length || 0) - 1}
+                  >
+                    Next Question
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -721,12 +786,12 @@ export default function Page(): JSX.Element {
         <div className="mt-6">
           <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
             <span>Progress</span>
-            <span>{currentQuestionIndex + 1} of {round.questions.length}</span>
+            <span>{currentQuestionIndex + 1} of {round && round.questions ? round.questions.length : '...'}</span>
           </div>
           <div className="bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
             <div
               className="bg-blue-600 h-2.5 rounded-full"
-              style={{ width: `${((currentQuestionIndex + 1) / round.questions.length) * 100}%` }}
+              style={{ width: `${round && round.questions ? ((currentQuestionIndex + 1) / round.questions.length) * 100 : 0}%` }}
             ></div>
           </div>
         </div>

@@ -30,6 +30,7 @@ export interface Question {
     experience_max: number;
     notice_period_days: number;
     available_positions: number;
+    round_number: number;
     total_applied: number;
     is_open: number;
     location: string;

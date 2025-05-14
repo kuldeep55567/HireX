@@ -33,7 +33,7 @@ export default function GenerateQuestionsPage() {
 
     const fetchJobDetails = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_HOST}/api/admin/jobs/${jobId}`);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_HOST}/api/admin/jobs/${jobId}?round=${roundNumber}`);
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.error || "Failed to fetch job details");
@@ -55,6 +55,7 @@ export default function GenerateQuestionsPage() {
 
       // Log the job details to debug
       console.log("Job details from API:", jobDetails);
+
       
       setRoundDetails({
         job_id: parseInt(jobDetails.job_id), // Use the correct job ID from the API response
@@ -68,13 +69,6 @@ export default function GenerateQuestionsPage() {
         round_title: jobDetails.title || jobDetails.round_title,
         description: jobDetails.description || "",
       });
-      
-      console.log("Set round details:", {
-        job_id: parseInt(jobDetails.id),
-        round_id: parseInt(jobDetails.id),
-        round_type: jobDetails.round_type
-      });
-
       // Set default question type based on round_type
       const questionType = jobDetails.round_type
 
@@ -105,6 +99,26 @@ export default function GenerateQuestionsPage() {
     }
   };
 
+  // Check local storage for cached questions on component mount
+  useEffect(() => {
+    if (jobId && roundNumber) {
+      const cacheKey = `generated_questions_${jobId}_${roundNumber}`;
+      const cachedQuestions = localStorage.getItem(cacheKey);
+      
+      if (cachedQuestions) {
+        try {
+          const parsedQuestions = JSON.parse(cachedQuestions);
+          console.log("Loaded questions from cache:", parsedQuestions);
+          setGeneratedQuestions(parsedQuestions);
+        } catch (err) {
+          console.error("Error parsing cached questions:", err);
+          // Invalid cache, we'll ignore it
+          localStorage.removeItem(cacheKey);
+        }
+      }
+    }
+  }, [jobId, roundNumber]);
+
   const generateQuestions = async () => {
     setIsLoading(true);
     setError(null);
@@ -115,15 +129,24 @@ export default function GenerateQuestionsPage() {
       return;
     }
 
+    // Check if we have cached questions first
+    const cacheKey = `generated_questions_${jobId}_${roundNumber}`;
+    const cachedQuestions = localStorage.getItem(cacheKey);
+    
+    if (cachedQuestions) {
+      try {
+        const parsedQuestions = JSON.parse(cachedQuestions);
+        setGeneratedQuestions(parsedQuestions);
+        setIsLoading(false);
+        return;
+      } catch (err) {
+        console.error("Error parsing cached questions:", err);
+        // Invalid cache, we'll proceed to generate new questions
+        localStorage.removeItem(cacheKey);
+      }
+    }
+
     try {
-      console.log({
-        job_id: roundDetails.job_id,
-        interview_stage_id: roundDetails.round_id,
-        question_count: formData.numQuestions,
-        difficulty: formData.difficultyLevel,
-        additional_context: formData.topic + (formData.additionalInfo ? `. ${formData.additionalInfo}` : ""),
-        question_type:  formData.questionType
-      })  
       // Call the AI questions API with the necessary parameters
       const response = await fetch(`/api/ai/questions`, {
         method: "POST",
@@ -162,6 +185,9 @@ export default function GenerateQuestionsPage() {
         expected_keywords: question.expected_keywords || []
       }));
       
+      // Save to local storage
+      localStorage.setItem(cacheKey, JSON.stringify(formattedQuestions));
+      
       setGeneratedQuestions(formattedQuestions);
     } catch (err) {
       console.error("Error generating questions:", err);
@@ -188,12 +214,13 @@ export default function GenerateQuestionsPage() {
         const questionData = {
           ...question,
           job_id: roundDetails.job_id, // Add job_id to each question
-          interview_stage_id: roundDetails.round_id // Ensure correct stage ID
+          interview_stage_id: roundDetails.round_number, // Use round_number instead of ID
+          save: true // Add flag to indicate this should be saved to the database
         };
 
         console.log("Saving question with data:", questionData);
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_HOST}/api/stageQuestions`, {
+        const response = await fetch(`/api/ai/questions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -208,6 +235,10 @@ export default function GenerateQuestionsPage() {
         }
       }
 
+      // Clear the cache after successful save to avoid duplicate submissions
+      const cacheKey = `generated_questions_${jobId}_${roundNumber}`;
+      localStorage.removeItem(cacheKey);
+      
       setSuccess(true);
     } catch (err) {
       setError((err as Error).message);
@@ -368,12 +399,11 @@ export default function GenerateQuestionsPage() {
                   <select
                     id="questionType"
                     name="questionType"
-                    value={formData.questionType}
+                    value="MCQ"
                     onChange={handleChange}
                     className="block w-full px-3 py-2 mt-1 text-gray-700 border border-gray-300 rounded-md shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="MCQ">Multiple Choice</option>
-                    <option value="Short Answer">Short Answer</option>
                   </select>
                 </div>
               )}
