@@ -5,6 +5,40 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function Home() {
+  // Define the workflow steps
+  const steps = [
+    {
+      number: 1,
+      title: "Define Your Requirements",
+      description: "Specify the role, experience level, and skills you're looking for."
+    },
+    {
+      number: 2,
+      title: "Automated Candidate Sourcing",
+      description: "Our AI scans platforms to find matching candidates and collects their contact information."
+    },
+    {
+      number: 3,
+      title: "Send Assessments",
+      description: "With one click, send personalized emails with custom assessments to candidates."
+    },
+    {
+      number: 4,
+      title: "Candidate Evaluation",
+      description: "Candidates complete quizzes and video responses which are automatically scored."
+    },
+    {
+      number: 5,
+      title: "Review Results",
+      description: "Access detailed reports and rankings of your candidates based on performance."
+    },
+    {
+      number: 6,
+      title: "Make Informed Decisions",
+      description: "Select the best candidates for interviews with confidence, backed by data."
+    }
+  ];
+  
   return (
     <div className="flex flex-col w-full">
       {/* Hero Section */}
@@ -22,7 +56,7 @@ export default function Home() {
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button asChild size="lg" className="group">
-                  <Link href="/login">
+                  <Link href="/openings">
                     Get Started <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </Link>
                 </Button>
@@ -49,7 +83,7 @@ export default function Home() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="w-full py-12 md:py-24 bg-secondary/30 rounded-xl">
+      <section id="features" className="w-full py-12 md:py-24 bg-blue-50 dark:bg-blue-900/20 rounded-3xl">
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center justify-center space-y-4 text-center">
             <div className="space-y-2">
@@ -152,78 +186,78 @@ export default function Home() {
 
       {/* How It Works Section */}
       <section id="how-it-works" className="w-full py-12 md:py-24">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center justify-center space-y-4 text-center">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-                How It Works
-              </h2>
-              <p className="max-w-[700px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed mx-auto">
-                Our streamlined process makes hiring exceptional talent faster and more efficient
-              </p>
-            </div>
-          </div>
-          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 md:grid-cols-3 pt-12">
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                1
-              </div>
-              <h3 className="text-xl font-bold">Define Your Requirements</h3>
-              <p className="text-muted-foreground">
-                Specify the role, experience level, and skills you're looking for.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                2
-              </div>
-              <h3 className="text-xl font-bold">Automated Candidate Sourcing</h3>
-              <p className="text-muted-foreground">
-                Our AI scans platforms to find matching candidates and collects their contact information.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                3
-              </div>
-              <h3 className="text-xl font-bold">Send Assessments</h3>
-              <p className="text-muted-foreground">
-                With one click, send personalized emails with custom assessments to candidates.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                4
-              </div>
-              <h3 className="text-xl font-bold">Candidate Evaluation</h3>
-              <p className="text-muted-foreground">
-                Candidates complete quizzes and video responses which are automatically scored.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                5
-              </div>
-              <h3 className="text-xl font-bold">Review Results</h3>
-              <p className="text-muted-foreground">
-                Access detailed reports and rankings of your candidates based on performance.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center space-y-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                6
-              </div>
-              <h3 className="text-xl font-bold">Make Informed Decisions</h3>
-              <p className="text-muted-foreground">
-                Select the best candidates for interviews with confidence, backed by data.
-              </p>
-            </div>
+      <div className="container px-4 md:px-6">
+        <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12">
+          <div className="space-y-2">
+            <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
+              How It Works
+            </h2>
+            <p className="max-w-[700px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed mx-auto">
+              Our streamlined process makes hiring exceptional talent faster and more efficient
+            </p>
           </div>
         </div>
-      </section>
+        
+        {/* Mobile view - stacked cards */}
+        <div className="md:hidden space-y-8">
+          {steps.map((step) => (
+            <div key={step.number} className="bg-card rounded-lg p-6 shadow-sm border">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
+                  {step.number}
+                </div>
+                <h3 className="text-lg font-bold">{step.title}</h3>
+              </div>
+              <p className="text-muted-foreground">{step.description}</p>
+            </div>
+          ))}
+        </div>
+        
+        {/* Desktop view - zigzag layout with connecting dots */}
+        <div className="hidden md:block">
+          <div className="relative">
+            {/* Vertical line in the middle */}
+            <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-dotted-line z-0 border-l-2 border-dashed border-primary/30"></div>
+            
+            {steps.map((step, index) => {
+              const isEven = index % 2 === 0;
+              
+              return (
+                <div 
+                  key={step.number} 
+                  className={`relative z-10 flex items-center mb-20 ${isEven ? 'justify-start' : 'justify-end'}`}
+                >
+                  {/* Connecting dot */}
+                  <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-primary/60"></div>
+                  
+                  {/* Content card */}
+                  <div className={`w-5/12 bg-card rounded-lg p-6 shadow-md border ${isEven ? 'mr-auto' : 'ml-auto'}`}>
+                    <div className="flex items-center space-x-4 mb-4">
+                      <div className="flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-lg shadow-sm">
+                        {step.number}
+                      </div>
+                      <h3 className="text-xl font-bold">{step.title}</h3>
+                    </div>
+                    <p className="text-muted-foreground">{step.description}</p>
+                  </div>
+                  
+                  {/* Horizontal line connecting to the center */}
+                  <div 
+                    className={`absolute top-1/2 h-0.5 bg-primary/30 ${
+                      isEven ? 'left-[calc(5/12*100%)] right-1/2' : 'right-[calc(5/12*100%)] left-1/2'
+                    }`}
+                  ></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+
 
       {/* Testimonials */}
-      <section className="w-full py-12 md:py-24 bg-muted/50 rounded-xl">
+      <section className="w-full py-12 md:py-24 bg-blue-50 dark:bg-blue-900/20 rounded-3xl">
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center justify-center space-y-4 text-center">
             <div className="space-y-2">
@@ -282,7 +316,7 @@ export default function Home() {
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
               <Button asChild size="lg" className="group">
-                <Link href="/login">
+                <Link href="/openings">
                   Get Started <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>

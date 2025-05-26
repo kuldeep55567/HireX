@@ -30,16 +30,35 @@ const Webcam = dynamic(
   }
 );
 
-const useSpeechToText = (typeof window !== 'undefined') ?
-  require('react-hook-speech-to-text').useSpeechToText :
-  () => ({
-    error: null,
-    interimResult: '',
-    isRecording: false,
-    results: [],
-    startSpeechToText: () => { },
-    stopSpeechToText: () => { },
-  });
+const useSpeechToText = (options: any) => {
+  // Fallback for SSR
+  if (typeof window === 'undefined') {
+    return {
+      error: null,
+      interimResult: '',
+      isRecording: false,
+      results: [],
+      startSpeechToText: () => {},
+      stopSpeechToText: () => {},
+    };
+  }
+
+  try {
+    // Use dynamic import to properly load the module
+    const { useSpeechToText } = require('react-hook-speech-to-text');
+    return useSpeechToText(options);
+  } catch (err) {
+    console.error('Failed to load speech-to-text library:', err);
+    return {
+      error: new Error('Speech recognition not available'),
+      interimResult: '',
+      isRecording: false,
+      results: [],
+      startSpeechToText: () => {},
+      stopSpeechToText: () => {},
+    };
+  }
+};
 
 
 type Round = {
@@ -110,14 +129,15 @@ export default function InterviewPage(): JSX.Element {
   const [currentQuestionResults, setCurrentQuestionResults] = useState<any[]>([]);
 
   // Initialize speech recognition only on client side
-  const speechConfig = isClient ? {
+  // Update the speech config to ensure it only runs on client
+  const speechConfig = {
     continuous: true,
     useLegacyResults: false,
     speechRecognitionProperties: {
       lang: 'en-US',
       interimResults: true,
     }
-  } : null;
+  };
 
   const {
     error: speechError,
@@ -126,7 +146,7 @@ export default function InterviewPage(): JSX.Element {
     results,
     startSpeechToText,
     stopSpeechToText,
-  } = useSpeechToText?.(speechConfig) || {};
+  } = useSpeechToText(speechConfig);
 
   // Set client flag on mount
   useEffect(() => {
@@ -140,21 +160,26 @@ export default function InterviewPage(): JSX.Element {
     }
   }, [results]);
 
-  // Sync results with transcript state
+  // Update this useEffect
   useEffect(() => {
     if (!isClient) return;
 
-    if (currentQuestionResults.length > 0) {
-      const transcript = currentQuestionResults.map(result =>
-        typeof result === 'string' ? result : result.transcript
-      ).join(' ');
+    if (results && results.length > 0) {
+      setCurrentQuestionResults(results);
+    }
+  }, [results]);
+
+  useEffect(() => {
+    if (!isClient) return;
+
+    const transcript = currentQuestionResults
+      .map(result => (typeof result === 'string' ? result : result.transcript))
+      .join(' ');
+
+    if (interimResult) {
+      setCurrentTranscript(`${transcript} ${interimResult}`.trim());
+    } else if (transcript) {
       setCurrentTranscript(transcript);
-    } else if (interimResult) {
-      setCurrentTranscript(
-        currentQuestionResults.length > 0 ?
-          currentQuestionResults.map(result => typeof result === 'string' ? result : result.transcript).join(' ') + ' ' + interimResult :
-          interimResult
-      );
     }
   }, [currentQuestionResults, interimResult, isClient]);
 
@@ -229,11 +254,21 @@ export default function InterviewPage(): JSX.Element {
         setCameraPermission(true);
         cameraStream.getTracks().forEach(track => track.stop());
 
-        // Check microphone permission
-        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setMicrophonePermission(true);
-        audioStream.getTracks().forEach(track => track.stop());
-
+        // Inside the checkPermissions function
+        try {
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          setMicrophonePermission(true);
+          audioStream.getTracks().forEach(track => track.stop());
+        } catch (err) {
+          const error = err as Error;
+          if (error.name === 'NotAllowedError') {
+            setMicrophonePermission(false);
+            setError('Microphone access is required for speech-to-text functionality. Please enable microphone permissions.');
+          } else {
+            console.error('Microphone access error:', error);
+            setMicrophonePermission(false);
+          }
+        }
         if (speechError) {
           setError('Your browser does not support speech recognition. Please use Chrome, Edge, Safari, or Firefox.');
         }
@@ -356,11 +391,16 @@ export default function InterviewPage(): JSX.Element {
   };
 
   const startRecording = (): void => {
-    if (startSpeechToText) {
+    if (typeof window !== 'undefined' && startSpeechToText) {
       questionStartTimeRef.current = Date.now();
       setCurrentQuestionResults([]);
       setCurrentTranscript('');
-      startSpeechToText();
+      try {
+        startSpeechToText();
+      } catch (err) {
+        console.error('Error starting speech recognition:', err);
+        setError('Speech recognition failed to start. Please ensure microphone permissions are granted.');
+      }
     }
   };
 
@@ -594,7 +634,7 @@ export default function InterviewPage(): JSX.Element {
 
   // Main interview interface
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen dark:bg-background">
       <div className="max-w-7xl mx-auto p-4 lg:py-8">
         {/* Header */}
         <div className="mb-6 flex flex-wrap justify-between items-center">
@@ -602,6 +642,7 @@ export default function InterviewPage(): JSX.Element {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{round.title}</h1>
             <p className="text-gray-600 dark:text-gray-400">{round.description}</p>
           </div>
+          {/* Replace this section in the header (around line 700) */}
           <div className="mt-4 sm:mt-0 flex items-center">
             <div className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-3 py-1 rounded-full text-sm font-medium">
               Question {currentQuestionIndex + 1} of {round.questions.length}
@@ -616,7 +657,7 @@ export default function InterviewPage(): JSX.Element {
                 Next Question: {pauseTimer}s
               </div>
             )}
-            {isRecording && (
+            {(pauseState === 'recording' || remainingTime > 0) && (
               <div className="ml-4 text-gray-700 dark:text-gray-300 flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -677,6 +718,12 @@ export default function InterviewPage(): JSX.Element {
                 </div>
                 {/* And update the buttons section to remove the Next Question button: */}
                 <div className="mt-2 flex space-x-2">
+                  {speechError && (
+                    <div className="mt-4 p-3 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 rounded-md">
+                      <p>Speech recognition error: {speechError.message}</p>
+                      <p className="text-sm">Please try refreshing the page or use a different browser.</p>
+                    </div>
+                  )}
                   {!cameraActive && (
                     <button
                       onClick={startCamera}

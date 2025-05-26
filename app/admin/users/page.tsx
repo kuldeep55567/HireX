@@ -77,11 +77,11 @@ export default function Page() {
       try {
         setLoading(true);
         const response = await fetch('/api/applicants');
-        
+
         if (!response.ok) {
           throw new Error('Failed to fetch applicants');
         }
-        
+
         const data = await response.json();
         setApplicants(data);
       } catch (err: any) {
@@ -131,7 +131,6 @@ export default function Page() {
             Manage and view all job applications
           </p>
         </div>
-
         <div className="bg-white dark:bg-background shadow-md rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -215,8 +214,8 @@ export default function Page() {
                         {formatDate(applicant.created_at)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <a 
-                          href={`/applicants/${applicant.id}?job_id=${applicant.job_id}`} 
+                        <a
+                          href={`/applicants/${applicant.id}?job_id=${applicant.job_id}`}
                           className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 mr-3"
                         >
                           View
